@@ -348,9 +348,8 @@ op_head_ptr: dq 0
 ; Stack value consists of 2 dwords (big endian):
 ; High: Type
 ; Low: Value
-stk: rq 8192
+stk: rq 1024
 stk_ptr: dq 0
-register
 trace_level:   dq 0
 trace_info:    db "INFO:    "
 trace_warning: db "WARNING: "
