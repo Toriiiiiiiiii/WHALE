@@ -71,7 +71,14 @@ entry main
 main:
     push    rbp                                             ; Save the stack frame
     mov     rbp, rsp
-    open    input_path, O_RDONLY, input_fd                  ; Open the source file
+readargs:
+    mov     rax, [rsp+8]                                    ; Get argc from stack
+    cmp     rax, 2                                          ; Throw error if filename not provided
+    jl      arg_err                                         
+    mov     rax, [rsp+24]                                   ; Retrieve file path from stack
+    mov     [input_path], rax                               ; Store file path to input_path
+openinput:
+    open    [input_path], O_RDONLY, input_fd                ; Open the source file
     cmp     rax, 0                                          ; Check for error
     jge     readinput
     log     err_file_read, err_file_read.size, LOG_ERROR    ; Display error message
@@ -186,6 +193,12 @@ done:
     exit    0                                               ; Exit with code 0
     mov     rsp, rbp
     pop     rbp
+    ret
+
+arg_err:
+    log     err_arg_msg, err_arg_msg.size, LOG_ERROR
+    exit    1
+    mov     rsp, rbp
     ret
 
 type_err:
@@ -321,6 +334,7 @@ segment readable writeable
 
 err_file_read str "Could not read file.", 10
 err_type_mismatch str "Type mismatch.", 10
+err_arg_msg str "Usage: whale <filename>", 10
 newln str 10
 
 push_msg str "Pushing integer value!", 10
@@ -329,7 +343,7 @@ print_msg str "Printing something!", 10
 ; Allocate 16mb to input string
 input: rb INPUT_SIZE
 input_offset: dq 0
-input_path: db "test.wle"
+input_path: rq 1
 input_fd: dq 0
 
 token: rb 512
