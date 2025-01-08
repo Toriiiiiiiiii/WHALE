@@ -1,3 +1,7 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;       Print function - prints an integer to STDOUT        ;
+;   -- Code taken from Tsoding's Porth Implementation --    ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 print:                             
     mov     r9, -3689348814741910323
     sub     rsp, 40

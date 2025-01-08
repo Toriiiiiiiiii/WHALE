@@ -19,207 +19,180 @@ include "strucs.inc"
 include "lexer.inc"
 include "print.inc"
 
-macro enqueue_op opcode, operand {
-    mov rdi, [op_tail_ptr]
-    mov dword [op_queue + rdi], opcode
-    add rdi, 4
-    mov dword [op_queue + rdi], operand
-    add rdi, 4
-    mov [op_tail_ptr], rdi
+; Enqueue operation to be executed
+macro enqueue opcode, operand 
+{
+    mov     rdi, [op_tail_ptr]
+    mov     dword [op_queue + rdi], opcode
+    add     rdi, 4
+    mov     dword [op_queue + rdi], operand
+    add     rdi, 4
+    mov     [op_tail_ptr], rdi
 }
 
-macro dequeue_op {
-    mov rsi, [op_head_ptr]
-    mov eax, [op_queue + rsi]
-    add rsi, 4
-    mov edi, [op_queue + rsi]
-    add rsi, 4
-    mov [op_head_ptr], rsi
+; Dequeue next operation to be executed
+;   -> %eax -> opcode
+;   -> %edi -> operand
+macro dequeue 
+{
+    mov     rsi, [op_head_ptr]
+    mov     eax, [op_queue + rsi]
+    add     rsi, 4
+    mov     edi, [op_queue + rsi]
+    add     rsi, 4
+    mov     [op_head_ptr], rsi
 }
 
-macro stack_push type, value {
-    mov rdi, [stk_ptr]  
-    mov dword [stk + rdi], type
-    add rdi, 4
-    mov dword [stk + rdi], value
-    add rdi, 4
-    mov [stk_ptr], rdi
+; Push value to runtime stack
+macro spush type, value 
+{
+    mov     rdi, [stk_ptr]  
+    mov     dword [stk + rdi], type
+    add     rdi, 4
+    mov     dword [stk + rdi], value
+    add     rdi, 4
+    mov     [stk_ptr], rdi
 }
 
-macro stack_pop {
-    mov rsi, [stk_ptr]
-    sub rsi, 4
-    mov eax, [stk + rsi]
-    sub rsi, 4
-    mov edi, [stk + rsi]
-    mov [stk_ptr], rsi
+; Pop value from runtime stack
+;   -> %eax -> value
+;   -> %edi -> type
+macro spop 
+{
+    mov     rsi, [stk_ptr]
+    sub     rsi, 4
+    mov     eax, [stk + rsi]
+    sub     rsi, 4
+    mov     edi, [stk + rsi]
+    mov     [stk_ptr], rsi
 }
 
 entry main
 main:
-    push rbp                                            ; Save the stack frame
-    mov rbp, rsp
-
-    open input_path, O_RDONLY, input_fd                 ; Open the source file
-    cmp rax, 0                                          ; Check for error
-    jge readinput
-
-    log err_file_read, err_file_read.size, LOG_ERROR    ; Display error message
-    exit 1                                              ; Exit with code 1
-    mov rsp, rbp
-    pop rbp
+    push    rbp                                             ; Save the stack frame
+    mov     rbp, rsp
+    open    input_path, O_RDONLY, input_fd                  ; Open the source file
+    cmp     rax, 0                                          ; Check for error
+    jge     readinput
+    log     err_file_read, err_file_read.size, LOG_ERROR    ; Display error message
+    exit    1                                               ; Exit with code 1
+    mov     rsp, rbp
+    pop     rbp
     ret
-
 readinput:
-    read [input_fd], input, INPUT_SIZE                  ; Read the input file
-    cmp rax, 0                                          ; Check for error
-    jge readdone
-
-    log err_file_read, err_file_read.size, LOG_ERROR    ; Display error message
-    exit 1                                              ; Exit with code 1
-    mov rsp, rbp
-    pop rbp
+    read    [input_fd], input, INPUT_SIZE                   ; Read the input file
+    cmp     rax, 0                                          ; Check for error
+    jge     readdone
+    log     err_file_read, err_file_read.size, LOG_ERROR    ; Display error message
+    exit    1                                               ; Exit with code 1
+    mov     rsp, rbp
+    pop     rbp
     ret
-
 readdone:
-    close input_fd                                      ; Close input file
+    close   input_fd                                        ; Close input file
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; LEXICAL ANALYSIS
 lex:
-    getnextword input, [input_offset], token            ; Get the next word 
-    add [input_offset], rbx                             ; Add the offset
-    dec rbx                                             ; Decrement to get token size
-
-    cmp rax, 0                                          ; End of file
-    je lex_done                 
-
-    call is_token_integer   
-    cmp rax, 0
-    je lex_notint
-
-    call get_int
-    enqueue_op OP_PUSHINT, eax
-    jmp lex
-
+    getword input, [input_offset], token                    ; Get the next word 
+    add     [input_offset], rbx                             ; Add the offset
+    dec     rbx                                             ; Decrement to get token size
+    cmp     rax, 0                                          ; End of file
+    je      lex_done                 
+    call    is_token_integer                                ; Check if token is an integer
+    cmp     rax, 0                                          
+    je      lex_notint
+    call    get_int                                         ; Convert string to integer
+    enqueue OP_PUSHINT, eax                                 ; Queue PUSH_INT operation
+    jmp     lex                                             ; Restart loop
 lex_notint:
-    mov rsi, token
-    mov rdi, tok_print
-    call streq
-    cmp rax, 0
-    je lex_notprint
-
-    enqueue_op OP_PRINT, 0
-    jmp lex
-
+    mov     rsi, token                                      ; Check if token is 'print'
+    mov     rdi, tok_print
+    call    streq
+    cmp     rax, 0
+    je      lex_notprint
+    enqueue OP_PRINT, 0                                     ; Queue PRINT operation
+    jmp     lex                                             ; Restart loop
 lex_notprint:
-    mov rsi, token
-    mov rdi, tok_add
-    call streq
-    cmp rax, 0
-    je lex_notadd
-
-    enqueue_op OP_ADD, 0
-    jmp lex
-
+    mov     rsi, token                                      ; Check if token is '+'
+    mov     rdi, tok_add                                
+    call    streq
+    cmp     rax, 0
+    je      lex_notadd
+    enqueue OP_ADD, 0                                       ; Queue ADD operation
+    jmp     lex                                             ; Restart loop
 lex_notadd:
-    mov rsi, token
-    mov rdi, tok_sub
-    call streq
-    cmp rax, 0
-    je lex_notsub
-
-    enqueue_op OP_SUB, 0
-    jmp lex
-
+    mov     rsi, token                                      ; Check if token is '-'
+    mov     rdi, tok_sub                                    
+    call    streq
+    cmp     rax, 0
+    je      lex_notsub
+    enqueue OP_SUB, 0                                       ; Queue SUB operation
+    jmp     lex                                             ; Restart loop
 lex_notsub:
-    jmp lex
-
+    jmp     lex                                             ; Restart loop
 lex_done:
-    enqueue_op OP_EOF, 0
+    enqueue OP_EOF, 0                                       ; Queue EOF operation
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; RUNTIME
 run:
-    dequeue_op
-    cmp eax, OP_EOF
-    je done
-
-    cmp eax, OP_PUSHINT
-    je pushint
-
-    cmp eax, OP_PRINT
-    je doprint
-
-    cmp eax, OP_ADD
-    je doadd
-
-    cmp eax, OP_SUB
-    je dosub
-
-    jmp run
-
-pushint:
-    mov rax, rdi
-    stack_push TYPE_INT, eax
-
-    jmp run
-
-doprint:
-    stack_pop
-
-    cmp edi, TYPE_INT
-    je printint
-
-    jmp run
-
-printint:
-    mov rdi, rax
-    call print
-    jmp run
-
-doadd:
-    stack_pop
-
-    mov rbx, rdi
-    mov rcx, rax
-
-    stack_pop
-
-    cmp rbx, rdi
-    jne type_err
-
-    add rax, rcx
-    stack_push ebx, eax
-    jmp run
-
-dosub:
-    stack_pop
-
-    mov rbx, rdi
-    mov rcx, rax
-
-    stack_pop
-
-    cmp rbx, rdi
-    jne type_err
-
-    sub rax, rcx
-    stack_push ebx, eax
-    jmp run
-    
+    dequeue                                                 ; Get next operation from queue
+    cmp     eax, OP_EOF                                     ; Check if at end of file
+    je      done
+    cmp     eax, OP_PUSHINT                                 ; Check if OP == PUSH_INT
+    je      pushint
+    cmp     eax, OP_PRINT                                   ; Check if OP == PRINT
+    je      doprint
+    cmp     eax, OP_ADD                                     ; Check if OP == ADD
+    je      doadd
+    cmp     eax, OP_SUB                                     ; Check if OP == SUB
+    je      dosub
+    jmp     run                                             ; Restart loop
+pushint:                                                    ; PUSH_INT
+    mov     rax, rdi                                        ; Move value into EDI
+    spush   TYPE_INT, eax                                   ; Push the value to the stack
+    jmp     run                                             ; Restart loop
+doprint:                                                    ; PRINT
+    spop                                                    ; Retrieve value from stack
+    cmp     edi, TYPE_INT                                   ; Type check - Integer
+    je      printint                                        ; Print integer value
+    jmp     run                                             ; Restart loop
+printint:                                                   ; Print integer value
+    mov     rdi, rax
+    call    print
+    jmp     run                                             ; Restart loop
+doadd:                                                      ; ADD
+    spop                                                    ; b = pop()
+    mov     rbx, rdi                                        ; Save value & type of B
+    mov     rcx, rax
+    spop                                                    ; a = pop()
+    cmp     rbx, rdi                                        ; Ensure types are the same
+    jne     type_err
+    add     rax, rcx                                        ; Add values
+    spush   ebx, eax                                        ; Push result to stack
+    jmp     run                                             ; Restart loop
+dosub:                                                      ; SUB
+    spop                                                    ; b = pop()
+    mov     rbx, rdi                                        ; Save value & type of B
+    mov     rcx, rax
+    spop                                                    ; a = pop()
+    cmp     rbx, rdi                                        ; Ensure types are the same
+    jne     type_err
+    sub     rax, rcx                                        ; Subtract values
+    spush   ebx, eax                                        ; Push result to stack
+    jmp     run                                             ; Restart loop
 done:
-    ; Exit program
-    exit 0                                              ; Exit with code 0
-    mov rsp, rbp
-    pop rbp
+    exit    0                                               ; Exit with code 0
+    mov     rsp, rbp
+    pop     rbp
     ret
 
 type_err:
-    log err_type_mismatch, err_type_mismatch.size, LOG_ERROR
-    exit 1
-    mov rsp, rbp
-    pop rbp
+    log     err_type_mismatch, err_type_mismatch.size, LOG_ERROR
+    exit    1
+    mov     rsp, rbp
+    pop     rbp
     ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -232,115 +205,115 @@ type_err:
 ; Return values:
 ;   -> %rax: length of the string
 strlen:
-    push rbp                                            ; Preserve stack frame
-    mov rbp, rsp
-
-    mov rax, 0                                          ; Reset registers
-    mov rbx, 0
+    push    rbp                                             ; Preserve stack frame
+    mov     rbp, rsp
+    mov     rax, 0                                          ; Reset registers
+    mov     rbx, 0
 strlen_lp:
-    mov al, [rdi]                                       ; Read next character
-    cmp al, 0                                           ; Break if at end of string
-    je strlen_done
-
-    add rbx, 1                                             ; Increment counter
-    add rdi, 1                                             ; Increment pointer
-    jmp strlen_lp                                       ; Begin next iteration
-
+    mov     al, [rdi]                                       ; Read next character
+    cmp     al, 0                                           ; Break if at end of string
+    je      strlen_done
+    add     rbx, 1                                          ; Increment counter
+    add     rdi, 1                                          ; Increment pointer
+    jmp     strlen_lp                                       ; Begin next iteration
 strlen_done:
-    mov rax, rbx
-    mov rsp, rbp                                        ; Restore stack frame
-    pop rbp
-    ret                                                 ; Return
+    mov     rax, rbx
+    mov     rsp, rbp                                        ; Restore stack frame
+    pop     rbp
+    ret                                                     ; Return
 
 
+; streq :- Determine if two strings are equal
+; Parameters:
+;   -> %rdi: string 1
+;   -> %rsi: string 2
+;
+; Return values:
+;   -> %rax: 1 if strings are equal, 0 otherwise.
 streq:
-    push rbp
-    mov rbp, rsp
-
-    mov rax, 0
-    mov rbx, 0
+    push    rbp                                             ; Preserve stack fram
+    mov     rbp, rsp
+    mov     rax, 0                                          ; Reset RAX
+    mov     rbx, 0                                          ; Reset RBX
 streq_leneq:
-    mov al, [rsi]
-    mov bl, [rdi]
-
-    cmp rax, rbx
-    jne streq_neq
-
-    cmp rax, 0
-    je streq_eq
-
-    inc rsi
-    inc rdi
-    jmp streq_leneq
-
+    mov     bl, [rdi]                                       ; Get char from string 1
+    mov     al, [rsi]                                       ; Get char from string 2
+    cmp     rax, rbx                                        ; Compare characters
+    jne     streq_neq                                       ; Return 0 if not equal
+    cmp     rax, 0                                          ; Return 1 if at end of string
+    je      streq_eq                                        ; Any inequalities would've been found by this point.
+    inc     rsi                                             ; Increment pointers
+    inc     rdi
+    jmp     streq_leneq                                     ; Restart loop
 streq_eq:
-    mov rax, 1
-    mov rsp, rbp
-    pop rbp
-    ret
-
+    mov     rax, 1                                          ; Return value = 1
+    mov     rsp, rbp                                        ; Restore stack frame
+    pop     rbp
+    ret                                                     ; Return
 streq_neq:
-    mov rax, 0
-    mov rsp, rbp
-    pop rbp
-    ret
+    mov     rax, 0                                          ; Return value = 0
+    mov     rsp, rbp                                        ; Restore stack frame
+    pop     rbp
+    ret                                                     ; Return
 
 
+; is_token_integer :- Determine if currently stored token is valid number
+; Parameters:
+;   -> None
+;
+; Return values:
+;   -> %rax: 1 if token is an integer, 0 otherwise.
 is_token_integer:
-    push rbp
-    mov rbp, rsp
-
-    mov rdi, token
-    mov rax, 1
+    push    rbp                                             ; Preserve stack frame
+    mov     rbp, rsp
+    mov     rdi, token                                      ; Load pointer to token
+    mov     rax, 1                                          ; Return value - will stay as 1 unless overwritten
 tokint_lp:
-    mov bl, [rdi]
-    cmp bl, 0
-    je tokint_dn
-
-    cmp bl, 48
-    jge tokint_high
-
-    mov rax, 0
-    jmp tokint_dn
-
+    mov     bl, [rdi]                                       ; Load next character
+    cmp     bl, 0                                           ; Check if NULLCHAR
+    je      tokint_dn                                       ; Break out of loop at end of string
+    cmp     bl, 48                                          ; Compare character with ASCII code for '0'
+    jge     tokint_high                                     ; Continue if greater
+    mov     rax, 0                                          ; If less than 48, return 0
+    jmp     tokint_dn
 tokint_high:
-    cmp bl, 57
-    jle tokint_aftercheck
-
-    mov rax, 0
-    jmp tokint_dn
-
+    cmp     bl, 57                                          ; Compare character with ASCII code for '9'
+    jle     tokint_aftercheck                               ; If <= 57, character is a numeric digit
+    mov     rax, 0                                          ; Return 0 if > 57
+    jmp     tokint_dn
 tokint_aftercheck:
-    inc rdi
-    jmp tokint_lp
-
+    inc     rdi                                             ; Increment pointer
+    jmp     tokint_lp                                       ; Restart loop
 tokint_dn:
-    mov rsp, rbp
-    pop rbp
-    ret
+    mov     rsp, rbp                                        ; Restore stack frame
+    pop     rbp
+    ret                                                     ; Return
 
+
+; get_int :- Convert token value to an integer
+; Parameters:
+;   -> None
+;
+; Return values:
+;   -> %rax: The integer value represented by [token]
 get_int:
-    push rbp
-    mov rbp, rsp
-
-    mov rdi, token
-    mov rax, 0
-    mov rbx, 0
+    push    rbp
+    mov     rbp, rsp
+    mov     rdi, token
+    mov     rax, 0
+    mov     rbx, 0
 getint_lp:
-    mov bl, [rdi]
-    cmp bl, 0
-    je getint_dn
-
-    imul rax, 10
-    sub bl, 48
-    add rax, rbx
-    
-    inc rdi
-    jmp getint_lp
-
+    mov     bl, [rdi]
+    cmp     bl, 0
+    je      getint_dn
+    imul    rax, 10
+    sub     bl, 48
+    add     rax, rbx
+    inc     rdi
+    jmp     getint_lp
 getint_dn:
-    mov rsp, rbp
-    pop rbp
+    mov     rsp, rbp
+    pop     rbp
     ret
 
 
@@ -377,7 +350,7 @@ op_head_ptr: dq 0
 ; Low: Value
 stk: rq 8192
 stk_ptr: dq 0
-
+register
 trace_level:   dq 0
 trace_info:    db "INFO:    "
 trace_warning: db "WARNING: "
